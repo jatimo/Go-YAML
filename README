@@ -1,0 +1,4 @@
+Created by Isaac Wagner (ibw@isaacwagner.me)
+Go-YAML is a project to create a complete YAML processor capable of loading and dumping YAML character streams to and from native Go data structures.
+
+YAML is awesome.
