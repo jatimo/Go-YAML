@@ -141,11 +141,11 @@ var matches = []LexicalMatch { //In order of precedence!
 	LexicalMatch { "|", "LITERAL", false },
 	LexicalMatch { "&", "ANCHOR", false },
 	LexicalMatch { "\\*", "ALIAS", false },
-	LexicalMatch { "- ", "ENTRY", false },
-	LexicalMatch { ": ", "MAPVALUE", false}, //Map value
+	LexicalMatch { "-", "ENTRY", false },
+	LexicalMatch { ":", "MAPVALUE", false}, //Map value
 	//LexicalMatch { "[\\-\\+]?(\\.[0-9]+|[0-9]+(\\.[0-9]*)?)([eE][-\\+]?[0-9]+)?", "FLOAT %s" }, //FLOAT
 	//LexicalMatch { "[\\-\\+]?[0-9]+", "INT %s" }, //INT (base 10)
-	LexicalMatch { "[^:^&^*^ ^|]+( *[^:^&^*^ ^|])*", "STRING %s", true }, //STRING
+	LexicalMatch { "[^:^&^*^ ^\\-]+( *[^:^&^*^ ^\\-])*", "STRING %s", true }, //STRING
 }
 
 func doesMatch(s string) bool {
@@ -232,9 +232,17 @@ func Tokenize(input io.Reader) string {
 // 	for _, line := range lines {
 // 		fmt.Printf("%s\n", line);
 // 	}
+
+	var indentDefines = make([]int, 2);
+	indentDefines[0] = 0;
+	indentDefines[0] = 0;
 	
 	for _, line := range lines {
 		//do something about indentation here
+		spaces := numLeadingSpaces(line);
+		var indent string;
+		indent, indentDefines = calcIndent(spaces, indentDefines);
+		
 		
 		scan := new(Scanner);
 		scan.data = line;
@@ -244,35 +252,102 @@ func Tokenize(input io.Reader) string {
 			
 			if !still { //at the last character, do something with it or forget it forever :)
 				tokenized = cat(tokenized, fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
-				fmt.Printf("adding %s\n", fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
+				//fmt.Printf("adding %s\n", fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
 				lexeme = "";
 				break
 			}
 			
 			lexeme = cat(lexeme, trail);
+			
+			//TODO: this is a crude solution: make it better?
+			if lexeme == " " {
+				lexeme = ""; 
+				continue
+			}
 
-			fmt.Printf("lexeme='%s'\n", lexeme);
+			//fmt.Printf("lexeme='%s'\n", lexeme);
 			if doesMatch(lexeme) { //it matches a regexp
 				matches = true;
-				fmt.Printf("%s match...\n", lexeme);
+				//fmt.Printf("%s match...\n", lexeme);
 			}
 			else { //no match
 				if matches == true {
-					fmt.Printf("woop! lost it. Take a step back...\n");
+					//fmt.Printf("woop! lost it. Take a step back...\n");
 					matches = false;
 					scan.StepBack();
 					lexeme = trim(lexeme, 1);
 					tokenized = cat(tokenized, fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
-					fmt.Printf("adding %s\n", fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
+					//fmt.Printf("adding %s\n", fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
 					lexeme = "";
 				}
 			}
 		}
-		tokenized = cat(tokenized, "\n");
-		break
+		fmt.Printf("%d leading spaces.\n", spaces);
+		fmt.Printf("'%s' new spaces.\n", indent);
+		tokenized = fmt.Sprintf("%s%s\n", indent, tokenized);
+		//break
 	}
 	
 	return tokenized;
+}
+
+func calcIndent(numSpaces int, indents []int) (string, []int) { //returns a string with the appropriate number of spaces
+	
+	
+	for i := 0; i < len(indents)/2; i += 2 {
+		fmt.Printf("numSpaces=%d\n", numSpaces);
+		if (indents)[i] == numSpaces {
+			fmt.Printf("Found indent match ; num=%d\n", indents[i+1]);
+			return repeatString(" ", indents[i+1]), indents;
+		}
+	}
+	fmt.Printf("No match, so make it\n");
+	biggest := 0;
+	for i := 0; i < len(indents)/2; i += 2 {
+		if indents[i+1] > biggest {
+			biggest = indents[i+1];
+			fmt.Printf("Biggest = %d\n", biggest);
+		}
+	}
+	//not in there
+	bigger := make([]int, len(indents)+2);
+	
+	for i := 0; i < len(indents); i++ {
+		bigger[i] = (indents)[i];
+	}
+	
+	//going to assume that the yml is consistent among indents, and that any new ones are going to be BIGGER
+	//this is probably not a safe assumption
+	//TODO FIX THIS!
+	//(the reason this is non-trivial is that interpolating indents may require a bit more of an intelligent indent determining algorithm)
+	
+	bigger[0] = numSpaces;
+	bigger[1] = biggest+1;
+	indent, bigger := calcIndent(numSpaces, bigger);
+	return indent, bigger;
+}
+
+func repeatString(s string, times int) string {
+	orig := s;
+	for i := 0; i < times-1; i++ {
+		s = cat(s, orig);
+	}
+	
+	if times == 0 {
+		return "";
+	}
+	
+	return s;
+}
+
+func numLeadingSpaces(s string) int {
+	for i, char := range s {
+		if char != int(' ') {
+			return i;
+		}
+	}
+	
+	return utf8.RuneCountInString(s);
 }
 
 func cat(s string, str string) string{
