@@ -1,3 +1,12 @@
-First iteration:
+Fix the scoping rules in tokenize.go so that they don't rely on OTHER scopes, only the one's that they actually should rely on. i.e.
+something
+    something
+    something
+something
+  something
+  something
+  something #this indent level has just as much of a right to be one level in from root as that other one does :). Current implementation doesn't like this one very much though
 
-Support everything outlined in tokenize.go
+Figure out why the INT and FLOAT regexp's don't work and fix them so that everything isn't just a STRING
+
+Have a different token on each line, like in the example

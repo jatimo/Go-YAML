@@ -233,16 +233,20 @@ func Tokenize(input io.Reader) string {
 // 		fmt.Printf("%s\n", line);
 // 	}
 
-	var indentDefines = make([]int, 2);
-	indentDefines[0] = 0;
-	indentDefines[0] = 0;
+	var indentDefines = map[int] int {
+		0: 0,
+	};
+	
+	biggest := 0;
 	
 	for _, line := range lines {
 		//do something about indentation here
 		spaces := numLeadingSpaces(line);
 		var indent string;
-		indent, indentDefines = calcIndent(spaces, indentDefines);
+		indent, indentDefines, biggest = calcIndent(spaces, indentDefines, biggest);
 		
+		tokenized = fmt.Sprintf("%s%s", tokenized,  indent);
+		//fmt.Printf("\n\n%s\n\n", tokenized);
 		
 		scan := new(Scanner);
 		scan.data = line;
@@ -282,49 +286,21 @@ func Tokenize(input io.Reader) string {
 				}
 			}
 		}
-		fmt.Printf("%d leading spaces.\n", spaces);
-		fmt.Printf("'%s' new spaces.\n", indent);
-		tokenized = fmt.Sprintf("%s%s\n", indent, tokenized);
+		tokenized = fmt.Sprintf("%s\n", tokenized);
 		//break
 	}
 	
 	return tokenized;
 }
 
-func calcIndent(numSpaces int, indents []int) (string, []int) { //returns a string with the appropriate number of spaces
-	
-	
-	for i := 0; i < len(indents)/2; i += 2 {
-		fmt.Printf("numSpaces=%d\n", numSpaces);
-		if (indents)[i] == numSpaces {
-			fmt.Printf("Found indent match ; num=%d\n", indents[i+1]);
-			return repeatString(" ", indents[i+1]), indents;
-		}
+func calcIndent(numSpaces int, indents map[int]int, biggest int) (string, map[int]int, int) { //returns a string with the appropriate number of spaces
+	spaces, ok := indents[numSpaces];
+	if ok {
+		return repeatString(" ", spaces), indents, biggest;
 	}
-	fmt.Printf("No match, so make it\n");
-	biggest := 0;
-	for i := 0; i < len(indents)/2; i += 2 {
-		if indents[i+1] > biggest {
-			biggest = indents[i+1];
-			fmt.Printf("Biggest = %d\n", biggest);
-		}
-	}
-	//not in there
-	bigger := make([]int, len(indents)+2);
-	
-	for i := 0; i < len(indents); i++ {
-		bigger[i] = (indents)[i];
-	}
-	
-	//going to assume that the yml is consistent among indents, and that any new ones are going to be BIGGER
-	//this is probably not a safe assumption
-	//TODO FIX THIS!
-	//(the reason this is non-trivial is that interpolating indents may require a bit more of an intelligent indent determining algorithm)
-	
-	bigger[0] = numSpaces;
-	bigger[1] = biggest+1;
-	indent, bigger := calcIndent(numSpaces, bigger);
-	return indent, bigger;
+	//not in there yet
+	indents[numSpaces] = biggest+1;
+	return repeatString(" ", biggest+1), indents, biggest+1;
 }
 
 func repeatString(s string, times int) string {
