@@ -3,8 +3,13 @@ package main
 import (
 	"./yaml";
 	"os";
+	"fmt";
 )
 
 func main() {
-	fmt.Printf("%s\n", Tokenize(os.Open("sample.yml", os.O_RDONLY, 0666)));
+	file, err := os.Open("sample.yml", os.O_RDONLY, 0666);
+	if err != nil {
+		//panic
+	}
+	fmt.Printf("%s\n ", yaml.Tokenize(file));
 }	

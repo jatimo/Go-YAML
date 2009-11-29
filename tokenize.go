@@ -5,6 +5,7 @@ import (
 	"strings";
 	"regexp";
 	"fmt";
+	"utf8";
 );
 
 //TOKENIZE.GO
@@ -132,18 +133,19 @@ string
 type LexicalMatch struct {
 	exp string; //regular expression
 	out string; //formatted string, where %s is the lexeme that replaces the lexeme
+	needsString bool; //tells whether or not to run (S)Printf(exp, in), or just (S)Printf(exp)
 }
 
-matches := []LexicalMatch { //In order of precedence!
-	LexicalMatch { ">", "FOLDED" },
-	LexicalMatch { "|", "LITERAL" },
-	LexicalMatch { "&", "ANCHOR" },
-	LexicalMatch { "*", "ALIAS" },
-	LexicalMatch { "- ", "ENTRY" },
-	LexicalMatch { ": ", "MAPVALUE"}, //Map value
-	LexicalMatch { "[\\-\\+]?(\\.[0-9]+|[0-9]+(\\.[0-9]*)?)([eE][\\-\\+]?[0-9]+)?", "FLOAT %s" }, //FLOAT
-	LexicalMatch { "[\\-\\+]?[0-9]+", "INT %s" }, //INT (base 10)
-	LexicalMatch { "[^:^&^*^ ^\\|]+( *[^:^&^*^ ^\\|])*", "STRING %s" }, //STRING
+var matches = []LexicalMatch { //In order of precedence!
+	LexicalMatch { ">", "FOLDED", false },
+	LexicalMatch { "|", "LITERAL", false },
+	LexicalMatch { "&", "ANCHOR", false },
+	LexicalMatch { "\\*", "ALIAS", false },
+	LexicalMatch { "- ", "ENTRY", false },
+	LexicalMatch { ": ", "MAPVALUE", false}, //Map value
+	//LexicalMatch { "[\\-\\+]?(\\.[0-9]+|[0-9]+(\\.[0-9]*)?)([eE][-\\+]?[0-9]+)?", "FLOAT %s" }, //FLOAT
+	//LexicalMatch { "[\\-\\+]?[0-9]+", "INT %s" }, //INT (base 10)
+	LexicalMatch { "[^:^&^*^ ^|]+( *[^:^&^*^ ^|])*", "STRING %s", true }, //STRING
 }
 
 func doesMatch(s string) bool {
@@ -154,11 +156,12 @@ func doesMatch(s string) bool {
 			continue
 		}
 		for i := 0; i < len(res)/2; i += 2 {
-			if res[i] == 0 && res[i + 1] {
+			if res[i] == 0 && res[i + 1] == utf8.RuneCountInString(s) {
 				return true
 			}
 		}
 	}
+	return false
 }
 
 func tokenizeLexeme(s string) string {
@@ -169,11 +172,17 @@ func tokenizeLexeme(s string) string {
 			continue
 		}
 		for i := 0; i < len(res)/2; i += 2 {
-			if res[i] == 0 && res[i + 1] {
-				return fmt.Sprintf(match.out, s);
+			if res[i] == 0 && res[i + 1] == utf8.RuneCountInString(s) {
+				if match.needsString {
+					return fmt.Sprintf(match.out, s);
+				}
+				else {
+					return fmt.Sprintf(match.out);
+				}
 			}
 		}
 	}
+	return s; //this is bad
 }
 
 type Scanner struct {
@@ -182,19 +191,21 @@ type Scanner struct {
 }
 
 //Step returns the next character in the character stream. Returns "" if no characters left
-func (scan *Scanner)Step() string {
-	scan.index += 1;
+func (scan *Scanner)Step() (string, bool) {
 	
 	for i, char := range scan.data {
-		if i == index {
-			return string([]int{char});
+		if i == scan.index {
+			scan.index += 1;
+			return string([]int{char}), true;
 		}
 	}
 	
-	return "";
+	scan.index += 1;
+	
+	return "", false;
 }
 
-func (scan *Scanner)StepBack() string {
+func (scan *Scanner)StepBack() {
 	scan.index -= 1;
 }
 
@@ -204,7 +215,11 @@ func (scan *Scanner)StepBack() string {
 // }
 
 func Tokenize(input io.Reader) string {
-	data := string(io.ReadAll(input));
+	bytedata, err := io.ReadAll(input);
+	if err != nil {
+		//panic
+	}
+	data := string(bytedata);
 	
 	
 	//step through each. As soon as a regexp is recognized, turn on a flag. Keep stepping until no regexp's are recognized, then take a step back and tokenize that lexeme
@@ -214,48 +229,69 @@ func Tokenize(input io.Reader) string {
 	
 	lines := strings.Split(data, "\n", 0);
 	
-	for _, line range lines {
-		//do something about indentation here
+// 	for _, line := range lines {
+// 		fmt.Printf("%s\n", line);
+// 	}
 	
-		scan := new(Scanner).data = line;
-		lexeme.cat(scan.Step());
-		if doesMatch(lexeme) { //it matches a regexp
-			matches = true;
-			fmt.Printf("match...");
-		}
-		else { //no match
-			if matches == true {
-				fmt.Printf("woop! lost it. Take a step back...\n");
-				matches = false;
-				scan.StepBack();
-				lexeme.trim(1);
-				tokenized.cat(fmt.Sprintf("%s\n", tokenizeLexeme(lexeme)));
+	for _, line := range lines {
+		//do something about indentation here
+		
+		scan := new(Scanner);
+		scan.data = line;
+		
+		for  {			
+			trail, still := scan.Step();
+			
+			if !still { //at the last character, do something with it or forget it forever :)
+				tokenized = cat(tokenized, fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
+				fmt.Printf("adding %s\n", fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
+				lexeme = "";
+				break
+			}
+			
+			lexeme = cat(lexeme, trail);
+
+			fmt.Printf("lexeme='%s'\n", lexeme);
+			if doesMatch(lexeme) { //it matches a regexp
+				matches = true;
+				fmt.Printf("%s match...\n", lexeme);
+			}
+			else { //no match
+				if matches == true {
+					fmt.Printf("woop! lost it. Take a step back...\n");
+					matches = false;
+					scan.StepBack();
+					lexeme = trim(lexeme, 1);
+					tokenized = cat(tokenized, fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
+					fmt.Printf("adding %s\n", fmt.Sprintf("%s ", tokenizeLexeme(lexeme)));
+					lexeme = "";
+				}
 			}
 		}
-		
-		tokenized.cat("\n");
+		tokenized = cat(tokenized, "\n");
+		break
 	}
 	
 	return tokenized;
 }
 
-func (s *string)cat(str string) {
-	dat := make([]byte, len(str)+len(*s));
+func cat(s string, str string) string{
+	dat := make([]byte, len(str)+len(s));
 	
-	for i := 0; i < len(*s); i++ {
-		dat[i] = (*s)[i];
+	for i := 0; i < len(s); i++ {
+		dat[i] = s[i];
 	}
-	for i := len(*s); i < len(dat); i++ {
-		dat[i] = str[i-len(*s)];
+	for i := len(s); i < len(dat); i++ {
+		dat[i] = str[i-len(s)];
 	}
 	
-	return &string(dat)
+	return string(dat)
 }
 
-func (s *string)trim(num int) { //trims num characters off the end of s
-	dat := make([]int, utf8.RuneCountInString(*s)-num);
+func trim(s string, num int) string { //trims num characters off the end of s
+	dat := make([]int, utf8.RuneCountInString(s)-num);
 	
-	for i, char := range *s {
+	for i, char := range s {
 		dat[i] = char;
 		if i == len(dat)-1 { //get outa here before it segfaults because s has more values than dat has room for
 			break
