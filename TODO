@@ -7,6 +7,8 @@ something
   something
   something #this indent level has just as much of a right to be one level in from root as that other one does :). Current implementation doesn't like this one very much though
 
+Better yet, use an INDENT token rather than spaces to show indentations, and use some for of relative indenting (perhaps?)
+
 Figure out why the INT and FLOAT regexp's don't work and fix them so that everything isn't just a STRING
 
 Have a different token on each line, like in the example
